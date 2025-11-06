@@ -1,33 +1,33 @@
-const User = require('../models/User.model');
+const Parent = require('../models/Parent.model');
 const jwt = require('jsonwebtoken');
 
 // Generate JWT Token
-const generateToken = (userId) => {
+const generateToken = (parentId) => {
   return jwt.sign(
-    { id: userId },
+    { id: parentId },
     process.env.JWT_SECRET,
     { expiresIn: '7d' } // Token expires in 7 days
   );
 };
 
-// @desc    Register/Signup new user
+// @desc    Register/Signup new parent
 // @route   POST /api/auth/signup
 // @access  Public
 exports.signup = async (req, res) => {
   try {
     const { firstname, lastname, familyname, email, password } = req.body;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    // Check if parent already exists
+    const existingParent = await Parent.findOne({ email });
+    if (existingParent) {
       return res.status(400).json({
         success: false,
-        message: 'User with this email already exists'
+        message: 'Parent with this email already exists'
       });
     }
 
-    // Create new user
-    const user = await User.create({
+    // Create new parent
+    const parent = await Parent.create({
       firstname,
       lastname,
       familyname,
@@ -36,21 +36,21 @@ exports.signup = async (req, res) => {
     });
 
     // Generate token
-    const token = generateToken(user._id);
+    const token = generateToken(parent._id);
 
-    // Return user data (without password) and token
+    // Return parent data (without password) and token
     res.status(201).json({
       success: true,
       message: 'Account created successfully',
       data: {
-        user: {
-          id: user._id,
-          firstname: user.firstname,
-          lastname: user.lastname,
-          familyname: user.familyname,
-          email: user.email,
-          role: user.role,
-          createdAt: user.createdAt
+        parent: {
+          id: parent._id,
+          firstname: parent.firstname,
+          lastname: parent.lastname,
+          familyname: parent.familyname,
+          email: parent.email,
+          role: parent.role,
+          createdAt: parent.createdAt
         },
         token
       }
@@ -74,7 +74,7 @@ exports.signup = async (req, res) => {
   }
 };
 
-// @desc    Login/Signin user
+// @desc    Login/Signin parent
 // @route   POST /api/auth/signin
 // @access  Public
 exports.signin = async (req, res) => {
@@ -89,10 +89,10 @@ exports.signin = async (req, res) => {
       });
     }
 
-    // Find user by email (include password since it's select: false in model)
-    const user = await User.findOne({ email }).select('+password');
+    // Find parent by email (include password since it's select: false in model)
+    const parent = await Parent.findOne({ email }).select('+password');
 
-    if (!user) {
+    if (!parent) {
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
@@ -100,7 +100,7 @@ exports.signin = async (req, res) => {
     }
 
     // Check if password matches
-    const isPasswordCorrect = await user.comparePassword(password);
+    const isPasswordCorrect = await parent.comparePassword(password);
 
     if (!isPasswordCorrect) {
       return res.status(401).json({
@@ -110,20 +110,20 @@ exports.signin = async (req, res) => {
     }
 
     // Generate token
-    const token = generateToken(user._id);
+    const token = generateToken(parent._id);
 
-    // Return user data (without password) and token
+    // Return parent data (without password) and token
     res.status(200).json({
       success: true,
       message: 'Logged in successfully',
       data: {
-        user: {
-          id: user._id,
-          firstname: user.firstname,
-          lastname: user.lastname,
-          familyname: user.familyname,
-          email: user.email,
-          role: user.role
+        parent: {
+          id: parent._id,
+          firstname: parent.firstname,
+          lastname: parent.lastname,
+          familyname: parent.familyname,
+          email: parent.email,
+          role: parent.role
         },
         token
       }
@@ -137,31 +137,31 @@ exports.signin = async (req, res) => {
   }
 };
 
-// @desc    Get current logged in user
+// @desc    Get current logged in parent
 // @route   GET /api/auth/me
 // @access  Private (requires token)
 exports.getMe = async (req, res) => {
   try {
-    // req.user is set by the auth middleware
-    const user = await User.findById(req.user.id);
+    // req.parent is set by the auth middleware
+    const parent = await Parent.findById(req.parent.id);
 
     res.status(200).json({
       success: true,
       data: {
-        id: user._id,
-        firstname: user.firstname,
-        lastname: user.lastname,
-        familyname: user.familyname,
-        email: user.email,
-        role: user.role,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        id: parent._id,
+        firstname: parent.firstname,
+        lastname: parent.lastname,
+        familyname: parent.familyname,
+        email: parent.email,
+        role: parent.role,
+        createdAt: parent.createdAt,
+        updatedAt: parent.updatedAt
       }
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error fetching user data',
+      message: 'Error fetching parent data',
       error: error.message
     });
   }

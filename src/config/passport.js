@@ -1,17 +1,17 @@
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const User = require('../models/User.model');
+const Parent = require('../models/Parent.model');
 
-// Serialize user for the session
-passport.serializeUser((user, done) => {
-  done(null, user.id);
+// Serialize parent for the session
+passport.serializeUser((parent, done) => {
+  done(null, parent.id);
 });
 
-// Deserialize user from the session
+// Deserialize parent from the session
 passport.deserializeUser(async (id, done) => {
   try {
-    const user = await User.findById(id);
-    done(null, user);
+    const parent = await Parent.findById(id);
+    done(null, parent);
   } catch (error) {
     done(error, null);
   }
@@ -29,27 +29,27 @@ passport.use(
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
-        // Check if user already exists with this Google ID
-        let user = await User.findOne({ googleId: profile.id });
+        // Check if parent already exists with this Google ID
+        let parent = await Parent.findOne({ googleId: profile.id });
 
-        if (user) {
-          // User exists, return user
-          return done(null, user);
+        if (parent) {
+          // Parent exists, return parent
+          return done(null, parent);
         }
 
-        // Check if user exists with this email
-        user = await User.findOne({ email: profile.emails[0].value });
+        // Check if parent exists with this email
+        parent = await Parent.findOne({ email: profile.emails[0].value });
 
-        if (user) {
-          // Link Google account to existing user
-          user.googleId = profile.id;
-          user.avatar = profile.photos[0]?.value;
-          await user.save();
-          return done(null, user);
+        if (parent) {
+          // Link Google account to existing parent
+          parent.googleId = profile.id;
+          parent.avatar = profile.photos[0]?.value;
+          await parent.save();
+          return done(null, parent);
         }
 
-        // Create new user
-        const newUser = await User.create({
+        // Create new parent
+        const newParent = await Parent.create({
           googleId: profile.id,
           firstname: profile.name.givenName,
           lastname: profile.name.familyName,
@@ -60,7 +60,7 @@ passport.use(
           authProvider: 'google'
         });
 
-        done(null, newUser);
+        done(null, newParent);
       } catch (error) {
         done(error, null);
       }

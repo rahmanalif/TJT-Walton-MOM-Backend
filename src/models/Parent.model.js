@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const userSchema = new mongoose.Schema({
+const parentSchema = new mongoose.Schema({
   firstname: {
     type: String,
     required: [true, 'Please provide a first name'],
@@ -36,8 +36,8 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'admin'],
-    default: 'user'
+    enum: ['parent', 'admin'],
+    default: 'parent'
   },
   // OAuth fields
   googleId: {
@@ -58,7 +58,7 @@ const userSchema = new mongoose.Schema({
 });
 
 // Hash password before saving
-userSchema.pre('save', async function(next) {
+parentSchema.pre('save', async function(next) {
   // Only hash the password if it's new or modified
   if (!this.isModified('password')) {
     return next();
@@ -75,7 +75,7 @@ userSchema.pre('save', async function(next) {
 });
 
 // Method to compare password for login
-userSchema.methods.comparePassword = async function(candidatePassword) {
+parentSchema.methods.comparePassword = async function(candidatePassword) {
   try {
     return await bcrypt.compare(candidatePassword, this.password);
   } catch (error) {
@@ -83,6 +83,6 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   }
 };
 
-const User = mongoose.model('User', userSchema);
+const Parent = mongoose.model('Parent', parentSchema);
 
-module.exports = User;
+module.exports = Parent;

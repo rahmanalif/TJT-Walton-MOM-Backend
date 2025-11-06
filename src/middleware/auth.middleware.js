@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User.model');
+const Parent = require('../models/Parent.model');
 
 // Protect routes - verify JWT token
 exports.protect = async (req, res, next) => {
@@ -27,13 +27,13 @@ exports.protect = async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Get user from token (exclude password)
-      req.user = await User.findById(decoded.id);
+      // Get parent from token (exclude password)
+      req.parent = await Parent.findById(decoded.id);
 
-      if (!req.user) {
+      if (!req.parent) {
         return res.status(401).json({
           success: false,
-          message: 'User not found. Token invalid'
+          message: 'Parent not found. Token invalid'
         });
       }
 
@@ -56,10 +56,10 @@ exports.protect = async (req, res, next) => {
 // Authorize specific roles
 exports.authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    if (!roles.includes(req.parent.role)) {
       return res.status(403).json({
         success: false,
-        message: `User role '${req.user.role}' is not authorized to access this resource`
+        message: `Parent role '${req.parent.role}' is not authorized to access this resource`
       });
     }
     next();

@@ -1,9 +1,9 @@
 const jwt = require('jsonwebtoken');
 
 // Generate JWT Token
-const generateToken = (userId) => {
+const generateToken = (parentId) => {
   return jwt.sign(
-    { id: userId },
+    { id: parentId },
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -14,11 +14,11 @@ const generateToken = (userId) => {
 // @access  Public
 exports.oauthSuccess = (req, res) => {
   try {
-    // User is available from Passport (req.user)
-    const user = req.user;
+    // Parent is available from Passport (req.parent)
+    const parent = req.parent;
 
     // Generate JWT token
-    const token = generateToken(user._id);
+    const token = generateToken(parent._id);
 
     // In production, you'd redirect to your frontend with the token
     // For now, we'll return JSON
@@ -32,15 +32,15 @@ exports.oauthSuccess = (req, res) => {
       success: true,
       message: 'OAuth authentication successful',
       data: {
-        user: {
-          id: user._id,
-          firstname: user.firstname,
-          lastname: user.lastname,
-          familyname: user.familyname,
-          email: user.email,
-          avatar: user.avatar,
-          role: user.role,
-          authProvider: user.authProvider
+        parent: {
+          id: parent._id,
+          firstname: parent.firstname,
+          lastname: parent.lastname,
+          familyname: parent.familyname,
+          email: parent.email,
+          avatar: parent.avatar,
+          role: parent.role,
+          authProvider: parent.authProvider
         },
         token
       }
