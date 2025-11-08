@@ -25,6 +25,15 @@ const parentSchema = new mongoose.Schema({
     trim: true,
     match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email']
   },
+  phoneNumber: {
+    type: String,
+    trim: true
+  },
+  notificationPreference: {
+    type: String,
+    enum: ['email', 'sms', 'both', 'none'],
+    default: 'email'
+  },
   password: {
     type: String,
     required: function() {
@@ -39,6 +48,16 @@ const parentSchema = new mongoose.Schema({
     enum: ['parent', 'admin'],
     default: 'parent'
   },
+  // Family relationship fields
+  parentRole: {
+    type: String,
+    enum: ['mom', 'dad', 'parent'],
+    default: 'parent'
+  },
+  familyMembers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Parent'
+  }],
   // OAuth fields
   googleId: {
     type: String,

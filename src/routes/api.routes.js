@@ -10,6 +10,11 @@ const mealRoutes = require('./meal.routes');
 const groceryRoutes = require('./grocery.routes');
 const noteRoutes = require('./note.routes');
 const voiceRoutes = require('./voice.routes');
+const eventRoutes = require('./event.routes');
+const childRoutes = require('./child.routes');
+const invitationRoutes = require('./invitation.routes');
+const mergeRequestRoutes = require('./mergeRequest.routes');
+const passwordVaultRoutes = require('./passwordVault.routes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -20,5 +25,10 @@ router.use('/meals', mealRoutes);
 router.use('/groceries', groceryRoutes);
 router.use('/notes', noteRoutes);
 router.use('/voice', voiceRoutes);
+router.use('/events', eventRoutes);
+router.use('/children', childRoutes);
+router.use('/invitations', invitationRoutes);
+router.use('/merge-requests', mergeRequestRoutes);
+router.use('/password-vault', passwordVaultRoutes);
 
 module.exports = router;
