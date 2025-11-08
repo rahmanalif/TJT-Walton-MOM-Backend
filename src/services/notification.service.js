@@ -58,17 +58,78 @@ const sendEmail = async ({ to, subject, text, html }) => {
 
 //------------------ SMS ------------------//
 
+// Initialize Twilio client if credentials are available
+let twilioClient = null;
+if (
+  process.env.TWILIO_ACCOUNT_SID &&
+  process.env.TWILIO_AUTH_TOKEN &&
+  process.env.TWILIO_ACCOUNT_SID.startsWith('AC') && // Valid Twilio Account SID format
+  process.env.TWILIO_ACCOUNT_SID !== 'your-twilio-account-sid' // Not placeholder
+) {
+  try {
+    twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+  } catch (error) {
+    console.warn('Failed to initialize Twilio client:', error.message);
+  }
+}
+
 /**
  * Send an SMS message
- * @param {string} to - Recipient's phone number (in E.164 format)
+ * @param {string} to - Recipient's phone number (in E.164 format, e.g., +1234567890)
  * @param {string} body - SMS message body
  */
 const sendSms = async ({ to, body }) => {
-  console.log('--- SMS Notification ---');
-  console.log(`To: ${to}`);
-  console.log(`Body: ${body}`);
-  console.log('------------------------');
-  return Promise.resolve();
+  try {
+    // Check if Twilio is configured
+    if (!twilioClient || !process.env.TWILIO_PHONE_NUMBER) {
+      console.log('--- SMS Notification (Twilio not configured) ---');
+      console.log(`To: ${to}`);
+      console.log(`Body: ${body}`);
+      console.log('------------------------------------------------');
+      console.log('SETUP INSTRUCTIONS:');
+      console.log('1. Sign up for Twilio: https://www.twilio.com/try-twilio');
+      console.log('2. Get your Account SID, Auth Token, and Phone Number');
+      console.log('3. Add them to your .env file');
+      console.log('------------------------------------------------');
+      return Promise.resolve();
+    }
+
+    // Format phone number to E.164 if not already
+    let formattedNumber = to;
+    if (!to.startsWith('+')) {
+      // If US number without country code, add +1
+      if (to.length === 10) {
+        formattedNumber = `+1${to}`;
+      } else if (to.length === 11 && to.startsWith('1')) {
+        formattedNumber = `+${to}`;
+      }
+    }
+
+    const message = await twilioClient.messages.create({
+      body: body,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: formattedNumber
+    });
+
+    console.log('--- SMS Sent Successfully ---');
+    console.log(`Message SID: ${message.sid}`);
+    console.log(`To: ${formattedNumber}`);
+    console.log(`Status: ${message.status}`);
+    console.log(`Body: ${body}`);
+    console.log('-----------------------------');
+    return message;
+  } catch (error) {
+    console.error('--- SMS Sending Failed ---');
+    console.error(`Error: ${error.message}`);
+    console.error(`To: ${to}`);
+    console.error('---------------------------');
+
+    // Don't throw error in development, just log it
+    if (process.env.NODE_ENV === 'production') {
+      throw error;
+    }
+    return Promise.resolve();
+  }
 };
 
 //------------------ Notification Service ------------------//

@@ -15,6 +15,10 @@ const childRoutes = require('./child.routes');
 const invitationRoutes = require('./invitation.routes');
 const mergeRequestRoutes = require('./mergeRequest.routes');
 const passwordVaultRoutes = require('./passwordVault.routes');
+const settingsRoutes = require('./settings.routes');
+const teenInvitationRoutes = require('./teenInvitation.routes');
+const teenAuthRoutes = require('./teenAuth.routes');
+const messageRoutes = require('./message.routes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -30,5 +34,9 @@ router.use('/children', childRoutes);
 router.use('/invitations', invitationRoutes);
 router.use('/merge-requests', mergeRequestRoutes);
 router.use('/password-vault', passwordVaultRoutes);
+router.use('/settings', settingsRoutes);
+router.use('/teen-invitations', teenInvitationRoutes);
+router.use('/teen-auth', teenAuthRoutes);
+router.use('/messages', messageRoutes);
 
 module.exports = router;

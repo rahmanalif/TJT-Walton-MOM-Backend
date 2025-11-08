@@ -466,6 +466,22 @@ async function mergeFamilies(requesterParentId, recipientParentId) {
   const events = await Event.find({ child: { $in: allChildrenIds } });
   const eventsIds = events.map(e => e._id);
 
+  // Add each parent to the other's familyMembers array
+  const requesterParent = await Parent.findById(requesterParentId);
+  const recipientParent = await Parent.findById(recipientParentId);
+
+  // Add recipient to requester's family members
+  if (!requesterParent.familyMembers.includes(recipientParentId)) {
+    requesterParent.familyMembers.push(recipientParentId);
+    await requesterParent.save();
+  }
+
+  // Add requester to recipient's family members
+  if (!recipientParent.familyMembers.includes(requesterParentId)) {
+    recipientParent.familyMembers.push(requesterParentId);
+    await recipientParent.save();
+  }
+
   return {
     childrenIds,
     eventsIds,
