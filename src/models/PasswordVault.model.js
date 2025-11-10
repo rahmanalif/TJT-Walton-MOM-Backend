@@ -66,17 +66,16 @@ const passwordVaultSchema = new mongoose.Schema({
     required: true
   },
 
-  // Family name for filtering
+  // Family name for filtering (deprecated - now using linked familyMembers on Parent model)
   familyname: {
     type: String,
-    required: true,
     trim: true
   },
 
-  // Shared with family members (array of Parent IDs)
+  // Shared with family members (array of IDs that can reference Parent, Teen, or Child)
+  // Note: For querying, we check if the ID exists in sharedWith array
   sharedWith: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Parent'
+    type: mongoose.Schema.Types.ObjectId
   }],
 
   // Share with all family members flag
@@ -90,8 +89,8 @@ const passwordVaultSchema = new mongoose.Schema({
 
 // Index for faster queries
 passwordVaultSchema.index({ createdBy: 1, category: 1 });
-passwordVaultSchema.index({ familyname: 1 });
 passwordVaultSchema.index({ isFavorite: 1 });
+passwordVaultSchema.index({ sharedWith: 1 });
 
 const PasswordVault = mongoose.model('PasswordVault', passwordVaultSchema);
 

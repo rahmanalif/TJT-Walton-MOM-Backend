@@ -1,5 +1,7 @@
 const PasswordVault = require('../models/PasswordVault.model');
 const Parent = require('../models/Parent.model');
+const Teen = require('../models/Teen.model');
+const Child = require('../models/Child.model');
 
 // @desc    Create new password vault entry
 // @route   POST /api/password-vault
@@ -45,37 +47,62 @@ exports.createPasswordEntry = async (req, res) => {
     };
 
     // Handle shared with family members
-    if (sharedWith && Array.isArray(sharedWith)) {
-
-      // Validate that shared members belong to the linked family (self + familyMembers)
-      const current = await Parent.findById(req.parent._id).select('familyMembers');
-      const allowedParentIds = [current._id, ...(current.familyMembers || [])].map(id => id.toString());
-
-      const invalidShared = sharedWith.some(id => !allowedParentIds.includes(id.toString()));
-      if (invalidShared) {
-        return res.status(400).json({
-          success: false,
-          message: 'Some family members do not exist or do not belong to your family'
-        });
-      }
-
+    if (sharedWith && Array.isArray(sharedWith) && !sharedWithAll) {
       passwordData.sharedWith = sharedWith;
     } else {
       passwordData.sharedWith = [];
     }
 
-    // If sharedWithAll is true, get all family members
+    // If sharedWithAll is true, get all family members (Parents, Teens, and Children)
     if (sharedWithAll) {
-      const current = await Parent.findById(req.parent._id).select('familyMembers');
-      const allIds = [current._id, ...(current.familyMembers || [])];
-      passwordData.sharedWith = allIds.map(id => id._id ? id._id : id);
+      const current = await Parent.findById(req.parent._id)
+        .populate('familyMembers', '_id')
+        .populate('teenAccounts', '_id');
+
+      const allIds = [];
+
+      // Add current parent
+      allIds.push(current._id);
+
+      // Add linked parent family members
+      if (current.familyMembers && current.familyMembers.length > 0) {
+        allIds.push(...current.familyMembers.map(m => m._id));
+      }
+
+      // Add teen accounts
+      if (current.teenAccounts && current.teenAccounts.length > 0) {
+        allIds.push(...current.teenAccounts.map(t => t._id));
+      }
+
+      // Get all parent IDs for teen lookup
+      const allParentIds = [current._id, ...(current.familyMembers || []).map(m => m._id)];
+
+      // Add teens from other linked parents
+      const additionalTeens = await Teen.find({
+        parent: { $in: allParentIds },
+        _id: { $nin: (current.teenAccounts || []).map(t => t._id) }
+      }).select('_id');
+
+      if (additionalTeens.length > 0) {
+        allIds.push(...additionalTeens.map(t => t._id));
+      }
+
+      // Add child profiles
+      const childProfiles = await Child.find({
+        family: { $in: allParentIds }
+      }).select('_id');
+
+      if (childProfiles.length > 0) {
+        allIds.push(...childProfiles.map(c => c._id));
+      }
+
+      passwordData.sharedWith = allIds;
     }
 
     const passwordEntry = await PasswordVault.create(passwordData);
 
-    // Populate creator and shared members
+    // Populate creator
     await passwordEntry.populate('createdBy', 'firstname lastname email avatar');
-    await passwordEntry.populate('sharedWith', 'firstname lastname email avatar');
 
     res.status(201).json({
       success: true,
@@ -112,7 +139,6 @@ exports.getAllPasswordEntries = async (req, res) => {
       ]
     })
       .populate('createdBy', 'firstname lastname email avatar')
-      .populate('sharedWith', 'firstname lastname email avatar')
       .sort({ createdAt: -1 }); // Sort by newest first
 
     res.status(200).json({
@@ -141,7 +167,6 @@ exports.getFavoritePasswordEntries = async (req, res) => {
       isFavorite: true
     })
       .populate('createdBy', 'firstname lastname email avatar')
-      .populate('sharedWith', 'firstname lastname email avatar')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -172,7 +197,6 @@ exports.getPasswordEntriesByCategory = async (req, res) => {
       category: category.toLowerCase()
     })
       .populate('createdBy', 'firstname lastname email avatar')
-      .populate('sharedWith', 'firstname lastname email avatar')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -194,8 +218,7 @@ exports.getPasswordEntriesByCategory = async (req, res) => {
 exports.getPasswordEntryById = async (req, res) => {
   try {
     const passwordEntry = await PasswordVault.findById(req.params.id)
-      .populate('createdBy', 'firstname lastname email avatar')
-      .populate('sharedWith', 'firstname lastname email avatar');
+      .populate('createdBy', 'firstname lastname email avatar');
 
     if (!passwordEntry) {
       return res.status(404).json({
@@ -207,7 +230,7 @@ exports.getPasswordEntryById = async (req, res) => {
     // Check if user has access to this entry (creator or shared member)
     const isCreator = passwordEntry.createdBy._id.toString() === req.parent.id;
     const isShared = passwordEntry.sharedWith.some(
-      member => member._id.toString() === req.parent.id
+      memberId => memberId.toString() === req.parent.id
     );
 
     if (!isCreator && !isShared) {
@@ -286,28 +309,54 @@ exports.updatePasswordEntry = async (req, res) => {
     if (sharedWithAll !== undefined) updateData.sharedWithAll = sharedWithAll;
 
     // Handle shared with family members update
-    if (sharedWith !== undefined && Array.isArray(sharedWith)) {
-      if (sharedWith.length > 0) {
-        const current = await Parent.findById(req.parent._id).select('familyMembers');
-        const allowedParentIds = [current._id, ...(current.familyMembers || [])].map(id => id.toString());
-
-        const invalidShared = sharedWith.some(id => !allowedParentIds.includes(id.toString()));
-        if (invalidShared) {
-          return res.status(400).json({
-            success: false,
-            message: 'Some family members do not exist or do not belong to your family'
-          });
-        }
-      }
-
+    if (sharedWith !== undefined && Array.isArray(sharedWith) && !sharedWithAll) {
       updateData.sharedWith = sharedWith;
     }
 
-    // If sharedWithAll is true, get all linked family member ids
+    // If sharedWithAll is true, get all family member ids (Parents, Teens, and Children)
     if (sharedWithAll) {
-      const current = await Parent.findById(req.parent._id).select('familyMembers');
-      const allIds = [current._id, ...(current.familyMembers || [])];
-      updateData.sharedWith = allIds.map(id => id._id ? id._id : id);
+      const current = await Parent.findById(req.parent._id)
+        .populate('familyMembers', '_id')
+        .populate('teenAccounts', '_id');
+
+      const allIds = [];
+
+      // Add current parent
+      allIds.push(current._id);
+
+      // Add linked parent family members
+      if (current.familyMembers && current.familyMembers.length > 0) {
+        allIds.push(...current.familyMembers.map(m => m._id));
+      }
+
+      // Add teen accounts
+      if (current.teenAccounts && current.teenAccounts.length > 0) {
+        allIds.push(...current.teenAccounts.map(t => t._id));
+      }
+
+      // Get all parent IDs for teen lookup
+      const allParentIds = [current._id, ...(current.familyMembers || []).map(m => m._id)];
+
+      // Add teens from other linked parents
+      const additionalTeens = await Teen.find({
+        parent: { $in: allParentIds },
+        _id: { $nin: (current.teenAccounts || []).map(t => t._id) }
+      }).select('_id');
+
+      if (additionalTeens.length > 0) {
+        allIds.push(...additionalTeens.map(t => t._id));
+      }
+
+      // Add child profiles
+      const childProfiles = await Child.find({
+        family: { $in: allParentIds }
+      }).select('_id');
+
+      if (childProfiles.length > 0) {
+        allIds.push(...childProfiles.map(c => c._id));
+      }
+
+      updateData.sharedWith = allIds;
     }
 
     passwordEntry = await PasswordVault.findByIdAndUpdate(
@@ -318,8 +367,7 @@ exports.updatePasswordEntry = async (req, res) => {
         runValidators: true
       }
     )
-      .populate('createdBy', 'firstname lastname email avatar')
-      .populate('sharedWith', 'firstname lastname email avatar');
+      .populate('createdBy', 'firstname lastname email avatar');
 
     res.status(200).json({
       success: true,
@@ -368,7 +416,7 @@ exports.toggleFavorite = async (req, res) => {
     // Check if user has access (creator or shared member)
     const isCreator = passwordEntry.createdBy.toString() === req.parent.id;
     const isShared = passwordEntry.sharedWith.some(
-      member => member.toString() === req.parent.id
+      memberId => memberId.toString() === req.parent.id
     );
 
     if (!isCreator && !isShared) {
@@ -390,7 +438,6 @@ exports.toggleFavorite = async (req, res) => {
     await passwordEntry.save();
 
     await passwordEntry.populate('createdBy', 'firstname lastname email avatar');
-    await passwordEntry.populate('sharedWith', 'firstname lastname email avatar');
 
     res.status(200).json({
       success: true,
@@ -465,8 +512,10 @@ exports.getFamilyMembers = async (req, res) => {
   try {
     // Use linked family members (merged/invited) rather than matching on family name
     const user = await Parent.findById(req.parent._id)
-      .populate('familyMembers', 'firstname lastname email avatar role');
+      .populate('familyMembers', 'firstname lastname email avatar role')
+      .populate('teenAccounts', 'firstname lastname email avatar accountRole');
 
+    // Start with the current user
     const members = [
       {
         _id: user._id,
@@ -474,10 +523,76 @@ exports.getFamilyMembers = async (req, res) => {
         lastname: user.lastname,
         email: user.email,
         avatar: user.avatar,
-        role: user.role || 'parent'
-      },
-      ...user.familyMembers
+        role: user.role || 'parent',
+        type: 'parent'
+      }
     ];
+
+    // Add other parent family members
+    if (user.familyMembers && user.familyMembers.length > 0) {
+      const parentMembers = user.familyMembers.map(member => ({
+        _id: member._id,
+        firstname: member.firstname,
+        lastname: member.lastname,
+        email: member.email,
+        avatar: member.avatar,
+        role: member.role || 'parent',
+        type: 'parent'
+      }));
+      members.push(...parentMembers);
+    }
+
+    // Add teen/child/young-adult accounts
+    if (user.teenAccounts && user.teenAccounts.length > 0) {
+      const teenMembers = user.teenAccounts.map(teen => ({
+        _id: teen._id,
+        firstname: teen.firstname,
+        lastname: teen.lastname,
+        email: teen.email,
+        avatar: teen.avatar,
+        role: teen.accountRole,
+        type: 'teen'
+      }));
+      members.push(...teenMembers);
+    }
+
+    // Also get teen accounts from other linked family members
+    const allParentIds = [user._id, ...(user.familyMembers || []).map(m => m._id)];
+    const additionalTeens = await Teen.find({
+      parent: { $in: allParentIds },
+      _id: { $nin: (user.teenAccounts || []).map(t => t._id) }
+    }).select('firstname lastname email avatar accountRole');
+
+    if (additionalTeens.length > 0) {
+      const additionalTeenMembers = additionalTeens.map(teen => ({
+        _id: teen._id,
+        firstname: teen.firstname,
+        lastname: teen.lastname,
+        email: teen.email,
+        avatar: teen.avatar,
+        role: teen.accountRole,
+        type: 'teen'
+      }));
+      members.push(...additionalTeenMembers);
+    }
+
+    // Get child profiles (non-account family members)
+    const childProfiles = await Child.find({
+      family: { $in: allParentIds }
+    }).select('name email phoneNumber role colorCode');
+
+    if (childProfiles.length > 0) {
+      const childMembers = childProfiles.map(child => ({
+        _id: child._id,
+        firstname: child.name,
+        lastname: '',
+        email: child.email,
+        avatar: null,
+        role: child.role,
+        type: 'child-profile'
+      }));
+      members.push(...childMembers);
+    }
 
     res.status(200).json({
       success: true,
