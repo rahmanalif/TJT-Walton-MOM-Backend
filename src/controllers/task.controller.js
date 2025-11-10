@@ -44,18 +44,20 @@ exports.createTask = async (req, res) => {
 // @access  Private
 exports.getTasks = async (req, res) => {
   try {
-    const tasks = await Task.find({ createdBy: req.parent.id });
+    const tasks = await Task.find({
+      $or: [{ createdBy: req.parent.id }, { assignedTo: req.parent.id }],
+    });
 
     res.status(200).json({
       success: true,
       count: tasks.length,
-      data: tasks
+      data: tasks,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error fetching tasks',
-      error: error.message
+      message: "Error fetching tasks",
+      error: error.message,
     });
   }
 };
@@ -177,7 +179,7 @@ exports.deleteTask = async (req, res) => {
       });
     }
 
-    await task.remove();
+    await Task.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       success: true,

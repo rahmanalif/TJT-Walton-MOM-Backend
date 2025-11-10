@@ -175,7 +175,7 @@ exports.deleteMeal = async (req, res) => {
       });
     }
 
-    await meal.remove();
+    await Meal.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       success: true,

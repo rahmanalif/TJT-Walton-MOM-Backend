@@ -133,7 +133,7 @@ exports.deleteGroceryItem = async (req, res) => {
       });
     }
 
-    await groceryItem.remove();
+    await groceryItem.deleteOne();
 
     res.status(200).json({
       success: true,

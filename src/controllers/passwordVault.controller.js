@@ -28,6 +28,8 @@ exports.createPasswordEntry = async (req, res) => {
     }
 
     // Prepare password entry data
+    // We no longer use `familyname` to determine membership. Access is controlled
+    // by explicit sharedWith array and linked familyMembers on Parent.
     const passwordData = {
       title,
       category,
@@ -38,19 +40,19 @@ exports.createPasswordEntry = async (req, res) => {
       notes,
       isFavorite: isFavorite || false,
       createdBy: req.parent.id,
-      familyname: req.parent.familyname,
+      // familyname: req.parent.familyname, // intentionally omitted
       sharedWithAll: sharedWithAll || false
     };
 
     // Handle shared with family members
     if (sharedWith && Array.isArray(sharedWith)) {
-      // Validate that shared members exist and belong to the same family
-      const members = await Parent.find({
-        _id: { $in: sharedWith },
-        familyname: req.parent.familyname
-      });
 
-      if (members.length !== sharedWith.length) {
+      // Validate that shared members belong to the linked family (self + familyMembers)
+      const current = await Parent.findById(req.parent._id).select('familyMembers');
+      const allowedParentIds = [current._id, ...(current.familyMembers || [])].map(id => id.toString());
+
+      const invalidShared = sharedWith.some(id => !allowedParentIds.includes(id.toString()));
+      if (invalidShared) {
         return res.status(400).json({
           success: false,
           message: 'Some family members do not exist or do not belong to your family'
@@ -64,11 +66,9 @@ exports.createPasswordEntry = async (req, res) => {
 
     // If sharedWithAll is true, get all family members
     if (sharedWithAll) {
-      const allFamilyMembers = await Parent.find({
-        familyname: req.parent.familyname
-      }).select('_id');
-
-      passwordData.sharedWith = allFamilyMembers.map(member => member._id);
+      const current = await Parent.findById(req.parent._id).select('familyMembers');
+      const allIds = [current._id, ...(current.familyMembers || [])];
+      passwordData.sharedWith = allIds.map(id => id._id ? id._id : id);
     }
 
     const passwordEntry = await PasswordVault.create(passwordData);
@@ -288,12 +288,11 @@ exports.updatePasswordEntry = async (req, res) => {
     // Handle shared with family members update
     if (sharedWith !== undefined && Array.isArray(sharedWith)) {
       if (sharedWith.length > 0) {
-        const members = await Parent.find({
-          _id: { $in: sharedWith },
-          familyname: req.parent.familyname
-        });
+        const current = await Parent.findById(req.parent._id).select('familyMembers');
+        const allowedParentIds = [current._id, ...(current.familyMembers || [])].map(id => id.toString());
 
-        if (members.length !== sharedWith.length) {
+        const invalidShared = sharedWith.some(id => !allowedParentIds.includes(id.toString()));
+        if (invalidShared) {
           return res.status(400).json({
             success: false,
             message: 'Some family members do not exist or do not belong to your family'
@@ -304,13 +303,11 @@ exports.updatePasswordEntry = async (req, res) => {
       updateData.sharedWith = sharedWith;
     }
 
-    // If sharedWithAll is true, get all family members
+    // If sharedWithAll is true, get all linked family member ids
     if (sharedWithAll) {
-      const allFamilyMembers = await Parent.find({
-        familyname: req.parent.familyname
-      }).select('_id');
-
-      updateData.sharedWith = allFamilyMembers.map(member => member._id);
+      const current = await Parent.findById(req.parent._id).select('familyMembers');
+      const allIds = [current._id, ...(current.familyMembers || [])];
+      updateData.sharedWith = allIds.map(id => id._id ? id._id : id);
     }
 
     passwordEntry = await PasswordVault.findByIdAndUpdate(
@@ -466,15 +463,26 @@ exports.deletePasswordEntry = async (req, res) => {
 // @access  Private
 exports.getFamilyMembers = async (req, res) => {
   try {
-    // Get all parents with the same family name
-    const familyMembers = await Parent.find({
-      familyname: req.parent.familyname
-    }).select('firstname lastname email avatar role');
+    // Use linked family members (merged/invited) rather than matching on family name
+    const user = await Parent.findById(req.parent._id)
+      .populate('familyMembers', 'firstname lastname email avatar role');
+
+    const members = [
+      {
+        _id: user._id,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        email: user.email,
+        avatar: user.avatar,
+        role: user.role || 'parent'
+      },
+      ...user.familyMembers
+    ];
 
     res.status(200).json({
       success: true,
-      count: familyMembers.length,
-      data: familyMembers
+      count: members.length,
+      data: members
     });
   } catch (error) {
     res.status(500).json({

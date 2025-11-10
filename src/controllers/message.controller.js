@@ -508,9 +508,9 @@ exports.getFamilyMembers = async (req, res) => {
     const Child = require('../models/Child.model');
     const Teen = require('../models/Teen.model');
 
-    // Get current user
+    // Get current user and their linked family members
     const user = await Parent.findById(userId)
-      .populate('familyMembers', 'firstname lastname email avatar phoneNumber')
+      .populate('familyMembers', 'firstname lastname email avatar phoneNumber role')
       .populate('teenAccounts', 'firstname lastname email avatar phoneNumber accountRole');
 
     if (!user) {
@@ -520,20 +520,31 @@ exports.getFamilyMembers = async (req, res) => {
       });
     }
 
-    // Get children from Child model
+    // Build allowed parent ids (self + any linked family members)
+    const allowedParentIds = [user._id, ...(user.familyMembers || [])].map(p => p._id ? p._id : p).map(String);
+
+    // Get children where the child's `family` or `parent` reference points to any allowed parent id
     const children = await Child.find({
       $or: [
-        { family: userId },
-        { parent: userId }
+        { family: { $in: allowedParentIds } },
+        { parent: { $in: allowedParentIds } }
       ]
     });
 
-    // Get teens associated with this parent
-    const teens = await Teen.find({ parent: userId });
+    // Get teens where the teen's parent is any allowed parent id
+    const teens = await Teen.find({ parent: { $in: allowedParentIds } });
 
-    // Format all family members with type information
-    const familyMembers = [
-      // Other parents
+    // Include current user + linked parents, children and teens
+    const parentEntries = [
+      {
+        id: user._id,
+        name: `${user.firstname} ${user.lastname}`,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        avatar: user.avatar,
+        type: 'Parent',
+        role: user.role || 'parent'
+      },
       ...user.familyMembers.map(parent => ({
         id: parent._id,
         name: `${parent.firstname} ${parent.lastname}`,
@@ -541,29 +552,39 @@ exports.getFamilyMembers = async (req, res) => {
         phoneNumber: parent.phoneNumber,
         avatar: parent.avatar,
         type: 'Parent',
-        role: 'parent'
-      })),
-      // Children
-      ...children.map(child => ({
-        id: child._id,
-        name: child.name,
-        email: child.email,
-        phoneNumber: child.phoneNumber,
-        colorCode: child.colorCode,
-        type: 'Child',
-        role: child.role
-      })),
-      // Teens
-      ...teens.map(teen => ({
-        id: teen._id,
-        name: `${teen.firstname} ${teen.lastname}`,
-        email: teen.email,
-        phoneNumber: teen.phoneNumber,
-        avatar: teen.avatar,
-        type: 'Teen',
-        role: teen.accountRole
+        role: parent.role || 'parent'
       }))
     ];
+
+    const childEntries = children.map(child => ({
+      id: child._id,
+      name: child.name,
+      email: child.email,
+      phoneNumber: child.phoneNumber,
+      colorCode: child.colorCode,
+      type: 'Child',
+      role: child.role
+    }));
+
+    const teenEntries = teens.map(teen => ({
+      id: teen._id,
+      name: `${teen.firstname} ${teen.lastname}`,
+      email: teen.email,
+      phoneNumber: teen.phoneNumber,
+      avatar: teen.avatar,
+      type: 'Teen',
+      role: teen.accountRole
+    }));
+
+    // Merge and deduplicate by id to prevent duplicates when someone appears in multiple lists
+    const combined = [...parentEntries, ...childEntries, ...teenEntries];
+    const seen = new Set();
+    const familyMembers = combined.filter(item => {
+      const id = item.id.toString();
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
 
     res.status(200).json({
       success: true,

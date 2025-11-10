@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const Parent = require('../models/Parent.model');
+const Teen = require('../models/Teen.model');
 
 // Protect routes - verify JWT token
 exports.protect = async (req, res, next) => {
@@ -27,15 +28,32 @@ exports.protect = async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Get parent from token (exclude password)
-      req.parent = await Parent.findById(decoded.id);
+      // Check for parent
+      let user = await Parent.findById(decoded.id);
+      let role = 'parent';
 
-      if (!req.parent) {
+      // If not a parent, check for teen
+      if (!user) {
+        user = await Teen.findById(decoded.id);
+        role = 'teen';
+      }
+
+      if (!user) {
         return res.status(401).json({
           success: false,
-          message: 'Parent not found. Token invalid'
+          message: 'User not found. Token invalid'
         });
       }
+
+      req.user = user;
+      req.user.role = role;
+      // for backward compatibility
+      if (role === 'parent') {
+        req.parent = user;
+      } else {
+        req.teen = user;
+      }
+
 
       next();
     } catch (error) {
@@ -56,10 +74,10 @@ exports.protect = async (req, res, next) => {
 // Authorize specific roles
 exports.authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.parent.role)) {
+    if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: `Parent role '${req.parent.role}' is not authorized to access this resource`
+        message: `User role '${req.user.role}' is not authorized to access this resource`
       });
     }
     next();

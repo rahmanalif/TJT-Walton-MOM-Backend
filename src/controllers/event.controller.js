@@ -37,13 +37,13 @@ exports.createEvent = async (req, res) => {
 
     // Handle assigned family members
     if (assignedTo && Array.isArray(assignedTo)) {
-      // Validate that assigned members exist and belong to the same family
-      const members = await Parent.find({
-        _id: { $in: assignedTo },
-        familyname: req.parent.familyname
-      });
+      // Validate that assigned members exist and belong to the same linked family
+      const current = await Parent.findById(req.parent._id).select('familyMembers');
+      const allowedParentIds = [current._id, ...(current.familyMembers || [])].map(id => id.toString());
 
-      if (members.length !== assignedTo.length) {
+      // Ensure every assignedTo id is within allowedParentIds
+      const invalid = assignedTo.some(id => !allowedParentIds.includes(id.toString()));
+      if (invalid) {
         return res.status(400).json({
           success: false,
           message: 'Some assigned family members do not exist or do not belong to your family'
@@ -57,11 +57,10 @@ exports.createEvent = async (req, res) => {
 
     // If assignedToAll is true, get all family members
     if (assignedToAll) {
-      const allFamilyMembers = await Parent.find({
-        familyname: req.parent.familyname
-      }).select('_id');
-
-      eventData.assignedTo = allFamilyMembers.map(member => member._id);
+      // assignedToAll should include current parent + merged family members
+      const current = await Parent.findById(req.parent._id).select('familyMembers');
+      const allIds = [current._id, ...(current.familyMembers || [])];
+      eventData.assignedTo = allIds.map(id => id._id ? id._id : id);
     }
 
     const event = await Event.create(eventData);
@@ -293,12 +292,11 @@ exports.updateEvent = async (req, res) => {
     // Handle assigned family members update
     if (assignedTo !== undefined && Array.isArray(assignedTo)) {
       if (assignedTo.length > 0) {
-        const members = await Parent.find({
-          _id: { $in: assignedTo },
-          familyname: req.parent.familyname
-        });
+        const current = await Parent.findById(req.parent._id).select('familyMembers');
+        const allowedParentIds = [current._id, ...(current.familyMembers || [])].map(id => id.toString());
 
-        if (members.length !== assignedTo.length) {
+        const invalid = assignedTo.some(id => !allowedParentIds.includes(id.toString()));
+        if (invalid) {
           return res.status(400).json({
             success: false,
             message: 'Some assigned family members do not exist or do not belong to your family'
@@ -311,11 +309,9 @@ exports.updateEvent = async (req, res) => {
 
     // If assignedToAll is true, get all family members
     if (assignedToAll) {
-      const allFamilyMembers = await Parent.find({
-        familyname: req.parent.familyname
-      }).select('_id');
-
-      updateData.assignedTo = allFamilyMembers.map(member => member._id);
+      const current = await Parent.findById(req.parent._id).select('familyMembers');
+      const allIds = [current._id, ...(current.familyMembers || [])];
+      updateData.assignedTo = allIds.map(id => id._id ? id._id : id);
     }
 
     event = await Event.findByIdAndUpdate(
@@ -409,15 +405,26 @@ exports.deleteEvent = async (req, res) => {
 // @access  Private
 exports.getFamilyMembers = async (req, res) => {
   try {
-    // Get all parents with the same family name
-    const familyMembers = await Parent.find({
-      familyname: req.parent.familyname
-    }).select('firstname lastname email avatar role');
+    // Return parents associated via familyMembers and include self
+    const user = await Parent.findById(req.parent._id)
+      .populate('familyMembers', 'firstname lastname email avatar role');
+
+    const members = [
+      {
+        _id: user._id,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        email: user.email,
+        avatar: user.avatar,
+        role: user.role || 'parent'
+      },
+      ...user.familyMembers
+    ];
 
     res.status(200).json({
       success: true,
-      count: familyMembers.length,
-      data: familyMembers
+      count: members.length,
+      data: members
     });
   } catch (error) {
     res.status(500).json({
