@@ -1,4 +1,6 @@
 const Task = require('../models/Task.model');
+const { sendNotification } = require('../services/notification.service');
+const Parent = require('../models/Parent.model');
 
 // @desc    Create a new task
 // @route   POST /api/tasks
@@ -17,6 +19,21 @@ exports.createTask = async (req, res) => {
       dueTime,
       createdBy: req.parent.id
     });
+
+    // Find the parent who created the task
+    const createdByParent = await Parent.findById(req.parent.id).populate('familyMembers');
+
+    // Send notification to all family members except the one who created the task
+    for (const member of createdByParent.familyMembers) {
+      if (member.id.toString() !== createdByParent.id.toString()) {
+        await sendNotification({
+          user: member,
+          subject: 'New Task Created',
+          text: `A new task "${task.title}" has been created in your family.`,
+          html: `<p>A new task "<strong>${task.title}</strong>" has been created in your family.</p>`
+        });
+      }
+    }
 
     res.status(201).json({
       success: true,

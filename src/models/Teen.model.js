@@ -12,72 +12,59 @@ const teenSchema = new mongoose.Schema({
     required: [true, 'Please provide a last name'],
     trim: true
   },
-  email: {
-    type: String,
-    lowercase: true,
-    trim: true,
-    sparse: true, // Allow null but must be unique if provided
-    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email']
-  },
-  phoneNumber: {
-    type: String,
-    trim: true,
-    sparse: true // Allow null but must be unique if provided
-  },
-  password: {
-    type: String,
-    required: [true, 'Please provide a password'],
-    minlength: 6,
-    select: false
-  },
-  // Account role based on age
-  accountRole: {
-    type: String,
-    enum: ['child', 'teen', 'young-adult'],
-    required: [true, 'Please provide an account role']
-  },
-  // Age for validation
-  age: {
-    type: Number,
-    required: [true, 'Please provide age'],
-    min: 8,
-    max: 25
-  },
-  // Date of birth
-  dateOfBirth: {
-    type: Date,
-    required: [true, 'Please provide date of birth']
-  },
-  // Parent who invited this teen
-  parent: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Parent',
-    required: [true, 'Teen must be associated with a parent']
-  },
   familyname: {
     type: String,
     required: [true, 'Please provide a family name'],
     trim: true
   },
-  // Profile settings
-  avatar: {
-    type: String
+  email: {
+    type: String,
+    required: [true, 'Please provide an email'],
+    unique: true,
+    lowercase: true,
+    trim: true,
+    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email']
   },
+  phoneNumber: {
+    type: String,
+    trim: true
+  },
+  notificationPreference: {
+    type: String,
+    enum: ['email', 'sms', 'both', 'none'],
+    default: 'email'
+  },
+  // Profile settings
   displayName: {
     type: String,
     trim: true
   },
-  colorCode: {
-    type: String,
-    default: '#3b82f6'
-  },
-  // Account status
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  // Settings (simplified version of parent settings)
+  // App settings
   settings: {
+    mindfulUsage: {
+      enabled: {
+        type: Boolean,
+        default: false
+      },
+      reminderInterval: {
+        type: Number,
+        default: 20, // minutes
+        enum: [10, 15, 20, 30, 40, 45] // User can choose from these options
+      },
+      breakDuration: {
+        type: Number,
+        default: 5, // minutes
+        min: 2,
+        max: 15
+      },
+      dailyUsageGoal: {
+        type: Number,
+        default: 120, // minutes
+        min: 30,
+        max: 300
+        // Increment: 15 minutes (enforced in frontend slider)
+      }
+    },
     notifications: {
       pushEnabled: {
         type: Boolean,
@@ -91,45 +78,122 @@ const teenSchema = new mongoose.Schema({
         default: 'light'
       }
     },
+    profile: {
+      timeFormat: {
+        type: String,
+        enum: ['12-hour', '24-hour'],
+        default: '12-hour'
+      }
+    },
     privacy: {
       shareActivityStatus: {
         type: Boolean,
-        default: true
+        default: true,
+        description: 'Let family members see when you are active'
+      },
+      locationSharing: {
+        type: Boolean,
+        default: false,
+        description: 'Share your location for family coordination'
+      },
+      usageAnalytics: {
+        type: Boolean,
+        default: true,
+        description: 'Help improve the app by sharing usage data'
+      },
+      marketingCommunications: {
+        type: Boolean,
+        default: false,
+        description: 'Receive updates about new features'
+      },
+      dataBackupToCloud: {
+        type: Boolean,
+        default: true,
+        description: 'Automatically backup your family data'
+      }
+    },
+    security: {
+      twoFactorEnabled: {
+        type: Boolean,
+        default: false,
+        description: 'Add an extra layer of security to your account'
+      },
+      loginNotifications: {
+        type: Boolean,
+        default: true,
+        description: 'Get notified when someone logs into your account'
+      },
+      autoLockApp: {
+        type: Boolean,
+        default: false,
+        description: 'Automatically lock app after 15 minutes of inactivity'
+      },
+      autoLockTimeout: {
+        type: Number,
+        default: 15, // minutes
+        min: 1,
+        max: 60
       }
     }
   },
-  // Last login tracking
-  lastLogin: {
-    type: Date
+  // Active sessions tracking
+  activeSessions: [{
+    deviceName: {
+      type: String,
+      required: true
+    },
+    deviceType: {
+      type: String,
+      enum: ['web', 'mobile', 'tablet', 'desktop'],
+      default: 'web'
+    },
+    lastActive: {
+      type: Date,
+      default: Date.now
+    },
+    ipAddress: String,
+    userAgent: String,
+    sessionToken: String,
+    isCurrentDevice: {
+      type: Boolean,
+      default: false
+    }
+  }],
+  password: {
+    type: String,
+    required: function() {
+      // Password only required for local auth (not OAuth)
+      return this.authProvider === 'local' || !this.authProvider;
+    },
+    minlength: 6,
+    select: false
+  },
+  role: {
+    type: String,
+    enum: ['teen'],
+    default: 'teen'
+  },
+  // Family relationship fields
+  parent: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Parent'
+  },
+  // OAuth fields
+  googleId: {
+    type: String,
+    sparse: true,
+    unique: true
+  },
+  avatar: {
+    type: String
+  },
+  authProvider: {
+    type: String,
+    enum: ['local', 'google'],
+    default: 'local'
   }
 }, {
   timestamps: true
-});
-
-// Validate age matches account role
-teenSchema.pre('validate', function(next) {
-  if (this.age && this.accountRole) {
-    const { age, accountRole } = this;
-
-    if (accountRole === 'child' && (age < 8 || age > 12)) {
-      return next(new Error('Child account role requires age between 8-12'));
-    }
-    if (accountRole === 'teen' && (age < 13 || age > 17)) {
-      return next(new Error('Teen account role requires age between 13-17'));
-    }
-    if (accountRole === 'young-adult' && (age < 18 || age > 25)) {
-      return next(new Error('Young adult account role requires age between 18-25'));
-    }
-  }
-  next();
-});
-
-// Ensure either email or phone number is provided
-teenSchema.pre('validate', function(next) {
-  if (!this.email && !this.phoneNumber) {
-    return next(new Error('Please provide either email or phone number'));
-  }
-  next();
 });
 
 // Hash password before saving
@@ -156,20 +220,6 @@ teenSchema.methods.comparePassword = async function(candidatePassword) {
   } catch (error) {
     throw error;
   }
-};
-
-// Calculate age from date of birth
-teenSchema.methods.calculateAge = function() {
-  const today = new Date();
-  const birthDate = new Date(this.dateOfBirth);
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
-  }
-
-  return age;
 };
 
 const Teen = mongoose.model('Teen', teenSchema);

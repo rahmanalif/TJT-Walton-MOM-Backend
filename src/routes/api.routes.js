@@ -18,6 +18,7 @@ const passwordVaultRoutes = require('./passwordVault.routes');
 const settingsRoutes = require('./settings.routes');
 const teenInvitationRoutes = require('./teenInvitation.routes');
 const teenAuthRoutes = require('./teenAuth.routes');
+const teenRoutes = require('./teen.routes');
 const messageRoutes = require('./message.routes');
 
 // Mount routes
@@ -37,6 +38,7 @@ router.use('/password-vault', passwordVaultRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/teen-invitations', teenInvitationRoutes);
 router.use('/teen-auth', teenAuthRoutes);
+router.use('/teens', teenRoutes);
 router.use('/messages', messageRoutes);
 
 module.exports = router;
